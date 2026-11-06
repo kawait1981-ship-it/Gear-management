@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>道具点検・履歴管理アプリ</title>
+    <style>
+        :root {
+            --primary: #1a365d;
+            --accent: #2b6cb0;
+            --bg: #f7fafc;
+            --border: #e2e8f0;
+            --danger: #e53e3e;
+            --success: #2f855a;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0; padding: 0;
+            background-color: var(--bg);
+            color: #2d3748;
+            padding-bottom: 70px;
+        }
+        .bottom-nav {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            height: 60px;
+            background: #fff;
+            display: flex;
+            border-top: 1px solid var(--border);
+            z-index: 100;
+        }
+        .nav-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            color: #718096;
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+        }
+        .nav-item.active {
+            color: var(--accent);
+            font-weight: bold;
+        }
+        .nav-icon { font-size: 1.2rem; margin-bottom: 2px; }
+
+        .container {
+            padding: 12px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .card {
+            background: #fff;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            border: 1px solid var(--border);
+        }
+        h2 { font-size: 1.1rem; margin-top: 0; color: var(--primary); }
+
+        input[type="date"], input[type="text"], select {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.95rem;
+            margin-bottom: 8px;
+        }
+
+        .alert-box {
+            background-color: #fffaf0;
+            border-left: 4px solid #dd6b20;
+            color: #9c4221;
+            padding: 10px;
+            font-size: 0.85rem;
+            border-radius: 4px;
+            margin-bottom: 12px;
+        }
+
+        .cat-title {
+            background: var(--accent);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: bold;
+            margin-top: 12px;
+            margin-bottom: 8px;
+        }
+        .item-row {
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            gap: 10px;
+        }
+        .item-row.checked-bg { background-color: #f0fff4; }
+        .item-check {
+            width: 26px;
+            height: 26px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+        .item-info { flex: 1; }
+        .item-name { font-weight: bold; font-size: 0.9rem; }
+        .item-inputs { display: flex; gap: 6px; margin-top: 4px; }
+        .item-inputs input { margin-bottom: 0; font-size: 0.85rem; padding: 5px 8px; }
+
+        canvas {
+            border: 2px dashed var(--border);
+            border-radius: 6px;
+            width: 100%;
+            height: 120px;
+            background: #fff;
+            touch-action: none;
+        }
+
+        .btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            width: 100%;
+            font-size: 0.95rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn-outline { background: transparent; color: #4a5568; border: 1px solid var(--border); }
+        .btn-danger { background: var(--danger); color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; }
+        .btn-warning { background: #d69e2e; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; }
+
+        /* 変遷テーブル用 */
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+            margin-top: 10px;
+        }
+        .matrix-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+            white-space: nowrap;
+        }
+        .matrix-table th, .matrix-table td {
+            border: 1px solid var(--border);
+            padding: 6px 8px;
+            text-align: center;
+        }
+        .matrix-table th { background: #edf2f7; position: sticky; top: 0; }
+        .matrix-table td:first-child { text-align: left; font-weight: bold; background: #f7fafc; position: sticky; left: 0; z-index: 2; }
+        .matrix-table th:first-child { z-index: 3; }
+
+        @media print {
+            .bottom-nav, .no-print { display: none !important; }
+            body { padding-bottom: 0; background: #fff; }
+            .card { box-shadow: none; border: none; padding: 0; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- タブ①：今日の点検 -->
+    <div id="tabCheck" class="tab-content active">
+        <div class="card">
+            <h2 id="formTitle">⚾ 道具点検・チェックイン</h2>
+            <input type="hidden" id="editingRecordId" value="">
+            <label style="font-size: 0.85rem; font-weight: bold;">点検日</label>
+            <input type="date" id="checkDate">
+            <div class="alert-box">
+                📌 <strong>連絡ルール:</strong> ロジンバッグ新品が「0」、または試合球が「残4球」になったら連絡してください。
+            </div>
+            <button class="btn btn-outline" style="font-size: 0.8rem; padding: 6px;" onclick="resetChecks()">☑ すべてのチェックを外す</button>
+        </div>
+
+        <div id="checkListContainer"></div>
+
+        <div class="card" style="margin-top: 15px;">
+            <h2>📝 点検者の確認とサイン</h2>
+            <label style="font-size: 0.85rem; font-weight: bold;">点検者のお名前</label>
+            <input type="text" id="inspectorName" placeholder="例: 町田 コーチ">
+
+            <label style="font-size: 0.85rem; font-weight: bold;">手書きサイン（画面に直接記入）</label>
+            <canvas id="sigCanvas"></canvas>
+            <button class="btn btn-outline" style="margin-top: 5px; padding: 4px; font-size: 0.8rem;" onclick="clearCanvas()">サインを再入力</button>
+
+            <button class="btn" id="saveBtn" style="margin-top: 15px; background: var(--success);" onclick="saveInspection()">点検完了・履歴に保存する ➔</button>
+            <button class="btn btn-outline" id="cancelEditBtn" style="margin-top: 8px; display: none;" onclick="cancelEditMode()">修正をキャンセル</button>
+        </div>
+    </div>
+
+    <!-- タブ②：履歴・変遷リスト -->
+    <div id="tabHistory" class="tab-content">
+        <div class="card">
+            <h2>📈 道具の履歴・変遷確認</h2>
+            <label style="font-size: 0.85rem; font-weight: bold;">表示形式の選択</label>
+            <select id="viewModeSelect" onchange="renderHistoryTab()">
+                <option value="matrix">📊 すべての項目を一覧で比較（全項目変遷マトリクス）</option>
+                <option value="single">🔍 特定の品目を絞り込んで確認</option>
+            </select>
+
+            <div id="singleSelectContainer" style="display: none; margin-top: 10px;">
+                <label style="font-size: 0.85rem; font-weight: bold;">品目の選択</label>
+                <select id="itemFilter" onchange="renderItemTransitions()">
+                    <!-- 動的生成 -->
+                </select>
+            </div>
+        </div>
+        <div id="historyContainer"></div>
+    </div>
+
+    <!-- タブ③：印刷モード -->
+    <div id="tabPrint" class="tab-content">
+        <div class="card no-print">
+            <h2>🖨 印刷・PDF保存</h2>
+            <p style="font-size: 0.85rem; color: #4a5568;">直近の点検結果をきれいな表形式で出力します。</p>
+            <button class="btn" onclick="window.print()">印刷 / PDF保存</button>
+        </div>
+        <div id="printPreviewContainer"></div>
+    </div>
+</div>
+
+<!-- 下部ナビゲーション -->
+<nav class="bottom-nav">
+    <button class="nav-item active" onclick="switchTab('tabCheck', this)">
+        <span class="nav-icon">☑</span>
+        <span>今日の点検</span>
+    </button>
+    <button class="nav-item" onclick="switchTab('tabHistory', this)">
+        <span class="nav-icon">📜</span>
+        <span>履歴・変遷</span>
+    </button>
+    <button class="nav-item" onclick="switchTab('tabPrint', this)">
+        <span class="nav-icon">🖨</span>
+        <span>印刷</span>
+    </button>
+</nav>
+
+<script>
+    // 原本準拠：全55項目
+    const masterItems = [
+        { cat: "練習用", name: "ホームベース", defaultQty: "3" },
+        { cat: "練習用", name: "薄塁ベース", defaultQty: "3" },
+        { cat: "練習用", name: "Pプレート", defaultQty: "1" },
+        { cat: "練習用", name: "プレート固定具", defaultQty: "2" },
+        { cat: "練習用", name: "ハンマー&バール", defaultQty: "2" },
+        { cat: "練習用", name: "メジャー", defaultQty: "2" },
+        { cat: "練習用", name: "時計", defaultQty: "" },
+        { cat: "練習用", name: "マーカー", defaultQty: "" },
+        { cat: "練習用", name: "定規", defaultQty: "" },
+        { cat: "練習用", name: "ラインカー", defaultQty: "" },
+        { cat: "練習用", name: "石灰", defaultQty: "" },
+        { cat: "練習用", name: "M球(練習用)", defaultQty: "" },
+        { cat: "練習用", name: "カゴ", defaultQty: "8" },
+        { cat: "練習用", name: " ブルーシート", defaultQty: "" },
+        { cat: "練習用", name: "L字ネット", defaultQty: "" },
+        { cat: "練習用", name: "Tネット", defaultQty: "" },
+        { cat: "練習用", name: "ホワイトボード", defaultQty: "" },
+        { cat: "練習用", name: "台車", defaultQty: "" },
+        { cat: "練習用", name: "大人用キャッチャー道具", defaultQty: "" },
+
+        { cat: "共用", name: "バットケース", defaultQty: "" },
+        { cat: "共用", name: "レガシー", defaultQty: "3" },
+        { cat: "共用", name: "ペンシル", defaultQty: "" },
+        { cat: "共用", name: "サンドボール", defaultQty: "" },
+        { cat: "共用", name: "救護バッグ", defaultQty: "" },
+        { cat: "共用", name: "当番バッグ", defaultQty: "" },
+
+        { cat: "試合用", name: "M球(試合用)", defaultQty: "" },
+        { cat: "試合用", name: "アルミケース(M球)", defaultQty: "" },
+        { cat: "試合用", name: "キャッチャー道具", defaultQty: "" },
+        { cat: "試合用", name: " ロジンバッグ新品", defaultQty: "2" },
+        { cat: "試合用", name: " ロジンバッグ", defaultQty: "1" },
+        { cat: "試合用", name: " アイシングセット", defaultQty: "" },
+        { cat: "試合用", name: "カゴ", defaultQty: "" },
+        { cat: "試合用", name: " 作戦バッグ", defaultQty: "" },
+        { cat: "試合用", name: " メジャー", defaultQty: "1" },
+        { cat: "試合用", name: " ストライクボード(BSO)", defaultQty: "" },
+        { cat: "試合用", name: " 試合球", defaultQty: "12" },
+        { cat: "試合用", name: " コールドスプレー", defaultQty: "" },
+        { cat: "試合用", name: " ホームベース", defaultQty: "1" },
+        { cat: "試合用", name: " マーカー", defaultQty: "2" },
+        { cat: "試合用", name: "審判道具", defaultQty: "" },
+        { cat: "試合用", name: "バケツ", defaultQty: "2" },
+        { cat: "試合用", name: " ボール磨き", defaultQty: "2" },
+        { cat: "試合用", name: " ボール拭き用タオル", defaultQty: "" },
+        { cat: "試合用", name: "ブルーシート", defaultQty: "" },
+        { cat: "試合用", name: "団旗", defaultQty: "" },
+
+        { cat: "金井倉庫", name: "プラボール", defaultQty: "" },
+        { cat: "金井倉庫", name: "ソフトボール", defaultQty: "" },
+        { cat: "金井倉庫", name: "固定器具", defaultQty: "" },
+        { cat: "金井倉庫", name: "塁ベース", defaultQty: "3" },
+        { cat: "金井倉庫", name: "スコアテーブル", defaultQty: "" },
+        { cat: "金井倉庫", name: "プラカード", defaultQty: "" },
+        { cat: "金井倉庫", name: "タープ", defaultQty: "3" },
+        { cat: "金井倉庫", name: "ラダー", defaultQty: "" },
+        { cat: "金井倉庫", name: "ハードル", defaultQty: "" },
+        { cat: "金井倉庫", name: "球数ボード", defaultQty: "" }
+    ];
+
+    document.getElementById('checkDate').valueAsDate = new Date();
+    let historyData = JSON.parse(localStorage.getItem('machida_orioles_full_history')) || [];
+
+    let currentInputs = masterItems.map(item => ({
+        cat: item.cat,
+        name: item.name,
+        qty: item.defaultQty,
+        note: "",
+        checked: false
+    }));
+
+    function switchTab(tabId, el) {
+        document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(ni => ni.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        if (el) el.classList.add('active');
+
+        if (tabId === 'tabHistory') renderHistoryTab();
+        if (tabId === 'tabPrint') renderPrintTab();
+    }
+
+    function renderCheckList() {
+        const container = document.getElementById('checkListContainer');
+        container.innerHTML = '';
+
+        let currentCat = '';
+        currentInputs.forEach((item, index) => {
+            if (item.cat !== currentCat) {
+                currentCat = item.cat;
+                const catHeader = document.createElement('div');
+                catHeader.className = 'cat-title';
+                catHeader.innerText = `■ ${currentCat}`;
+                container.appendChild(catHeader);
+            }
+
+            const row = document.createElement('div');
+            row.className = `item-row ${item.checked ? 'checked-bg' : ''}`;
+            row.innerHTML = `
+                <input type="checkbox" class="item-check" ${item.checked ? 'checked' : ''} onchange="toggleCheck(${index}, this.checked)">
+                <div class="item-info">
+                    <div class="item-name">${item.name}</div>
+                    <div class="item-inputs">
+                        <input type="text" placeholder="数量" value="${item.qty}" style="width: 70px;" onchange="updateQty(${index}, this.value)">
+                        <input type="text" placeholder="状態・備考" value="${item.note}" onchange="updateNote(${index}, this.value)">
+                    </div>
+                </div>
+            `;
+            container.appendChild(row);
+        });
+    }
+
+    function toggleCheck(idx, checked) {
+        currentInputs[idx].checked = checked;
+        renderCheckList();
+    }
+    function updateQty(idx, val) { currentInputs[idx].qty = val; }
+    function updateNote(idx, val) { currentInputs[idx].note = val; }
+    function resetChecks() {
+        currentInputs.forEach(i => i.checked = false);
+        renderCheckList();
+    }
+
+    const canvas = document.getElementById('sigCanvas');
+    const ctx = canvas.getContext('2d');
+    let isDrawing = false;
+
+    function resizeCanvas() {
+        canvas.width = canvas.offsetWidth;
+        canvas.height = 120;
+    }
+    setTimeout(resizeCanvas, 100);
+
+    function startDraw(e) {
+        isDrawing = true;
+        ctx.beginPath();
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX || e.touches[0].clientX) - rect.left;
+        const y = (e.clientY || e.touches[0].clientY) - rect.top;
+        ctx.moveTo(x, y);
+    }
+    function draw(e) {
+        if (!isDrawing) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX || e.touches[0].clientX) - rect.left;
+        const y = (e.clientY || e.touches[0].clientY) - rect.top;
+        ctx.lineTo(x, y);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+    function stopDraw() { isDrawing = false; }
+
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDraw);
+    canvas.addEventListener('touchstart', startDraw);
+    canvas.addEventListener('touchmove', draw);
+    canvas.addEventListener('touchend', stopDraw);
+
+    function clearCanvas() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+
+    function saveInspection() {
+        const inspector = document.getElementById('inspectorName').value.trim();
+        if (!inspector) {
+            alert('点検者のお名前を入力してください');
+            return;
+        }
+
+        const dateVal = document.getElementById('checkDate').value;
+        const sigData = canvas.toDataURL();
+        const editingId = document.getElementById('editingRecordId').value;
+
+        if (editingId) {
+            // 既存レコードの更新
+            const index = historyData.findIndex(r => r.id == editingId);
+            if (index !== -1) {
+                historyData[index].date = dateVal;
+                historyData[index].inspector = inspector;
+                historyData[index].signature = sigData;
+                historyData[index].items = JSON.parse(JSON.stringify(currentInputs));
+            }
+            alert('履歴を更新しました！');
+        } else {
+            // 新規レコードの追加
+            const record = {
+                id: Date.now(),
+                date: dateVal,
+                inspector: inspector,
+                signature: sigData,
+                items: JSON.parse(JSON.stringify(currentInputs))
+            };
+            historyData.unshift(record);
+            alert('点検内容を履歴に保存しました！');
+        }
+
+        localStorage.setItem('machida_orioles_full_history', JSON.stringify(historyData));
+        cancelEditMode();
+        switchTab('tabHistory', document.querySelectorAll('.nav-item')[1]);
+    }
+
+    // 履歴データをフォームに読み込んで修正モードにする
+    function editRecord(id) {
+        const rec = historyData.find(r => r.id == id);
+        if (!rec) return;
+
+        document.getElementById('editingRecordId').value = rec.id;
+        document.getElementById('checkDate').value = rec.date;
+        document.getElementById('inspectorName').value = rec.inspector;
+        document.getElementById('formTitle').innerText = '✏️ 履歴の修正モード';
+        document.getElementById('saveBtn').innerText = '修正を保存する';
+        document.getElementById('cancelEditBtn').style.display = 'block';
+
+        // 項目データをロード
+        currentInputs = JSON.parse(JSON.stringify(rec.items));
+        renderCheckList();
+
+        // サインをCanvasに復元
+        if (rec.signature) {
+            const img = new Image();
+            img.onload = function() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+            };
+            img.src = rec.signature;
+        } else {
+            clearCanvas();
+        }
+
+        // タブを点検画面へ切り替え
+        switchTab('tabCheck', document.querySelectorAll('.nav-item')[0]);
+    }
+
+    // 修正モードのキャンセル
+    function cancelEditMode() {
+        document.getElementById('editingRecordId').value = '';
+        document.getElementById('formTitle').innerText = '⚾ 道具点検・チェックイン';
+        document.getElementById('saveBtn').innerText = '点検完了・履歴に保存する ➔';
+        document.getElementById('cancelEditBtn').style.display = 'none';
+        document.getElementById('inspectorName').value = '';
+        clearCanvas();
+        
+        // 初期データにリセット
+        currentInputs = masterItems.map(item => ({
+            cat: item.cat,
+            name: item.name,
+            qty: item.defaultQty,
+            note: "",
+            checked: false
+        }));
+        renderCheckList();
+    }
+
+    // 履歴の削除
+    function deleteRecord(id) {
+        if (confirm('この点検履歴を削除してもよろしいですか？')) {
+            historyData = historyData.filter(r => r.id != id);
+            localStorage.setItem('machida_orioles_full_history', JSON.stringify(historyData));
+            renderHistoryTab();
+        }
+    }
+
+    function renderHistoryTab() {
+        const mode = document.getElementById('viewModeSelect').value;
+        const singleContainer = document.getElementById('singleSelectContainer');
+        
+        if (mode === 'single') {
+            singleContainer.style.display = 'block';
+            const filterSelect = document.getElementById('itemFilter');
+            filterSelect.innerHTML = '';
+            masterItems.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.name;
+                opt.innerText = `【${item.cat}】${item.name}`;
+                filterSelect.appendChild(opt);
+            });
+            renderItemTransitions();
+        } else {
+            singleContainer.style.display = 'none';
+            renderMatrixView();
+        }
+    }
+
+    // 全項目一覧マトリクス表の描画（編集・削除ボタン付き）
+    function renderMatrixView() {
+        const container = document.getElementById('historyContainer');
+        container.innerHTML = '';
+
+        if (historyData.length === 0) {
+            container.innerHTML = '<div class="card" style="text-align:center; color:#718096;">まだ点検履歴がありません。</div>';
+            return;
+        }
+
+        let html = `
+            <div class="card">
+                <h2>📊 全項目 点検履歴マトリクス表</h2>
+                <p style="font-size:0.8rem; color:#718096;">日付の横にあるボタンから履歴の修正や削除が行えます。（横スクロール可能）</p>
+                <div class="table-responsive">
+                    <table class="matrix-table">
+                        <thead>
+                            <tr>
+                                <th>品目名</th>
+        `;
+
+        // ヘッダー行に日付と操作ボタンを展開
+        historyData.forEach(rec => {
+            html += `
+                <th>
+                    ${rec.date}<br>
+                    <span style="font-size:0.7rem; color:#718096;">(${rec.inspector})</span><br>
+                    <div style="margin-top:4px; display:flex; gap:4px; justify-content:center;">
+                        <button class="btn-warning" onclick="editRecord(${rec.id})">✏️ 修正</button>
+                        <button class="btn-danger" onclick="deleteRecord(${rec.id})">🗑️ 削除</button>
+                    </div>
+                </th>
+            `;
+        });
+
+        html += `
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+
+        let currentCat = '';
+        masterItems.forEach(master => {
+            if (master.cat !== currentCat) {
+                currentCat = master.cat;
+                html += `<tr style="background:#edf2f7; font-weight:bold;"><td colspan="${historyData.length + 1}">■ ${currentCat}</td></tr>`;
+            }
+
+            html += `<tr><td>${master.name}</td>`;
+
+            historyData.forEach(rec => {
+                const found = rec.items.find(i => i.name === master.name);
+                if (found) {
+                    const checkMark = found.checked ? '✔' : '-';
+                    const qtyVal = found.qty ? `数:${found.qty}` : '';
+                    const noteVal = found.note ? `(${found.note})` : '';
+                    html += `<td><span style="font-weight:bold; color:${found.checked ? 'var(--success)' : '#718096'}">${checkMark}</span> ${qtyVal} ${noteVal}</td>`;
+                } else {
+                    html += `<td>-</td>`;
+                }
+            });
+
+            html += `</tr>`;
+        });
+
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = html;
+    }
+
+    function renderItemTransitions() {
+        const selectedItem = document.getElementById('itemFilter').value;
+        const container = document.getElementById('historyContainer');
+        container.innerHTML = '';
+
+        if (historyData.length === 0) return;
+
+        let tableHTML = `
+            <div class="card">
+                <h2>📊 「${selectedItem}」の変遷履歴</h2>
+                <div class="table-responsive">
+                    <table class="matrix-table" style="white-space:normal;">
+                        <thead>
+                            <tr>
+                                <th>点検日</th>
+                                <th>点検者</th>
+                                <th>確認</th>
+                                <th>数量</th>
+                                <th>備考</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+
+        historyData.forEach(rec => {
+            const found = rec.items.find(i => i.name === selectedItem);
+            if (found) {
+                tableHTML += `
+                    <tr>
+                        <td>${rec.date}</td>
+                        <td>${rec.inspector}</td>
+                        <td>${found.checked ? '☑ 完了' : '未'}</td>
+                        <td><strong>${found.qty || '-'}</strong></td>
+                        <td>${found.note || '-'}</td>
+                        <td>
+                            <button class="btn-warning" onclick="editRecord(${rec.id})">✏️ 修正</button>
+                            <button class="btn-danger" onclick="deleteRecord(${rec.id})">🗑️ 削除</button>
+                        </td>
+                    </tr>
+                `;
+            }
+        });
+
+        tableHTML += '</tbody></table></div></div>';
+        container.innerHTML = tableHTML;
+    }
+
+    function renderPrintTab() {
+        const container = document.getElementById('printPreviewContainer');
+        if (historyData.length === 0) {
+            container.innerHTML = '<div class="card">印刷する履歴がありません。</div>';
+            return;
+        }
+
+        const latest = historyData[0];
+        let html = `
+            <div class="card">
+                <h1 style="font-size:1.2rem; text-align:center; color:var(--primary); margin-bottom:5px;">⚾ 道具点検完了・保管状態報告書</h1>
+                <div style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:10px; border-bottom:1px solid var(--border); padding-bottom:5px;">
+                    <div><strong>点検日:</strong> ${latest.date}</div>
+                    <div><strong>点検者:</strong> ${latest.inspector}</div>
+                </div>
+
+                <table class="matrix-table" style="white-space:normal; font-size:0.85rem;">
+                    <thead>
+                        <tr>
+                            <th>カテゴリ</th>
+                            <th>品目名</th>
+                            <th>確認</th>
+                            <th>数量</th>
+                            <th>備考</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        latest.items.forEach(i => {
+            html += `
+                <tr>
+                    <td style="text-align:left;">${i.cat}</td>
+                    <td style="text-align:left;"><strong>${i.name}</strong></td>
+                    <td>${i.checked ? '✔' : '-'}</td>
+                    <td>${i.qty || '-'}</td>
+                    <td style="text-align:left;">${i.note || ''}</td>
+                </tr>
+            `;
+        });
+
+        html += `
+                    </tbody>
+                </table>
+                <div style="margin-top:15px; text-align:right;">
+                    <span style="font-size:0.85rem; font-weight:bold;">署名: </span>
+                    <img src="${latest.signature}" style="height:40px; vertical-align:middle;">
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = html;
+    }
+
+    renderCheckList();
+</script>
+
+</body>
+</html>
